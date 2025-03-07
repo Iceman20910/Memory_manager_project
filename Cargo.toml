@@ -1,0 +1,10 @@
+[package]
+name = "memory_manager"
+version = "0.1.0"
+edition = "2021"
+description = "A custom memory manager implementation using buddy allocation"
+authors = ["Your Name <your.email@example.com>"]
+
+[dependencies]
+
+[dev-dependencies]
