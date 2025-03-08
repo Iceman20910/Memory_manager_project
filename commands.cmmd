@@ -1,25 +1,8 @@
-# Sample commands for Memory Manager
-
-# Insert a block with "Hello" data
 INSERT 5 Hello
-
-# Insert another block
 INSERT 7 Goodbye
-
-# Read the first block
 READ 0
-
-# Update the first block
 UPDATE 0 World
-
-# Read the updated block
 READ 0
-
-# Dump all blocks
 DUMP
-
-# Delete a block
 DELETE 1
-
-# Try to read the deleted block
 READ 1
