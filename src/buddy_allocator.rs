@@ -1,6 +1,15 @@
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 pub struct BuddyAllocator {
+    // BS: you DEFINITELY don't need an Arc Mutex...
+    //
+    // This is interesting. You have a vector of a single tuple?
+    // with the way you implemented this, free_blocks: (usize, usize)
+    // would have worked.
+    //
+    // I think there is a fundamental misunderstanding regarding the
+    // way memory manager should work. hopefully the comments below will
+    // help...
     free_blocks: Arc<Mutex<Vec<(usize, usize)>>>,
 }
 
@@ -10,13 +19,26 @@ impl BuddyAllocator {
         BuddyAllocator { free_blocks }
     }
 
+    // BS: allocation isn't that simple.
+    //
+    // 1.) If I request an allocation of 5 bytes, then you should allocate
+    // 8, the smallest power of two that'll fit it.
+    //
+    // 2.) if i allocate 8 bytes, that doesnt mean you have a free block of
+    // 65535 - 8 bytes. Instead, you actually have an allocated block of 8 bytes,
+    // a free block of 8 bytes, another free block of 16 bytes, 32, 64, 128, 256,
+    // 512, 1024, 2048, 4096, 8192, 16384, and 32768. This means 13 free blocks.
+    // look at this for reference https://en.wikipedia.org/wiki/Buddy_memory_allocation
     pub fn allocate(&mut self, size: usize) -> Result<usize, String> {
         if size == 0 {
             return Err("Invalid size".to_string());
         }
 
         let mut free_blocks = self.free_blocks.lock().unwrap();
-        if let Some(index) = free_blocks.iter().position(|&(start, end)| end - start >= size) {
+        if let Some(index) = free_blocks
+            .iter()
+            .position(|&(start, end)| end - start >= size)
+        {
             let (start, end) = free_blocks[index];
             free_blocks.remove(index);
 
@@ -38,6 +60,8 @@ impl BuddyAllocator {
             .unwrap_or(free_blocks.len());
 
         free_blocks.insert(index, (start, start + 1));
+        // usually, when you need to manually call drop, you're doing
+        // something fishy..
         drop(free_blocks);
         self.merge_free_blocks();
         Ok(())
@@ -69,3 +93,4 @@ impl BuddyAllocator {
         }
     }
 }
+

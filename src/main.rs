@@ -2,9 +2,9 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-mod memory_manager;
 mod buddy_allocator;
 mod memory_block;
+mod memory_manager;
 mod tests;
 
 use memory_manager::MemoryManager;
