@@ -8,14 +8,20 @@ mod tests {
         let mut manager = MemoryManager::new();
         let id = manager.insert(5, b"Hello".to_vec()).unwrap();
 
-        // Compare MemoryBlock's data with byte array
+        // Compare data in the buffer with byte array
         let block = manager.find(id).unwrap();
-        assert_eq!(block.get_data(), b"Hello");
+        let data = &manager.buffer[block.start..block.end]; // Access data from the buffer
+        assert_eq!(data, b"Hello");
 
         // Update the memory block
         manager.update(id, b"Goodbye".to_vec()).unwrap();
-        let block = manager.find(id).unwrap();
-        assert_eq!(block.get_data(), b"Goodbye");
+
+        // Access updated data in a separate scope
+        {
+            let block = manager.find(id).unwrap(); // Reborrow block
+            let updated_data = &manager.buffer[block.start..block.end]; // Access updated data
+            assert_eq!(updated_data, b"Goodbye");
+        }
 
         // Allocation test
         let mut allocator = BuddyAllocator::new();
@@ -36,8 +42,22 @@ mod tests {
         let read_result = manager.find(id);
         assert!(read_result.is_ok());
 
+        // Check data after insertion
+        {
+            let block = read_result.unwrap();
+            let data = &manager.buffer[block.start..block.end]; // Access data from buffer
+            assert_eq!(data, b"HelloWorld");
+        }
+
         let update_result = manager.update(id, b"ModifiedData".to_vec());
         assert!(update_result.is_ok());
+
+        // Check data after update in a separate scope
+        {
+            let block = manager.find(id).unwrap(); // Reborrow block
+            let updated_data = &manager.buffer[block.start..block.end]; // Access updated data
+            assert_eq!(updated_data, b"ModifiedData");
+        }
 
         let delete_result = manager.delete(id);
         assert!(delete_result.is_ok());
@@ -46,4 +66,3 @@ mod tests {
         assert!(manager.find(id).is_err());
     }
 }
-

@@ -1,17 +1,18 @@
+// In memory_manager.rs
+
 use crate::buddy_allocator::BuddyAllocator;
 use crate::memory_block::MemoryBlock;
 
 pub struct MemoryManager {
     allocator: BuddyAllocator,
-    buffer: Vec<u8>,
+    pub buffer: Vec<u8>, // Make this field public
     blocks: Vec<MemoryBlock>,
     next_id: usize,
 }
 
 impl MemoryManager {
     pub fn new() -> Self {
-        // Initialize buffer with zeros and a fixed size
-        let buffer_size = 65536;
+        let buffer_size = 65536; // Size of the buffer
         let buffer = vec![0u8; buffer_size];
 
         MemoryManager {
@@ -25,8 +26,12 @@ impl MemoryManager {
     pub fn insert(&mut self, size: usize, data: Vec<u8>) -> Result<usize, String> {
         let start = self.allocator.allocate(size).map_err(|e| e.to_string())?;
         let id = self.next_id;
-        self.blocks
-            .push(MemoryBlock::new(start, start + size, data));
+
+        // Create a MemoryBlock without data
+        self.blocks.push(MemoryBlock::new(start, start + size));
+
+        // Copy data into the buffer
+        self.buffer[start..start + size].copy_from_slice(&data);
         self.next_id += 1;
         Ok(id)
     }
@@ -51,7 +56,7 @@ impl MemoryManager {
                 .allocator
                 .allocate(data.len())
                 .map_err(|e| e.to_string())?;
-            // Copy data into the buffer
+            // Copy new data into the buffer
             self.buffer[new_start..new_start + data.len()].copy_from_slice(&data);
             self.allocator
                 .deallocate(block.start, current_size)
@@ -62,7 +67,6 @@ impl MemoryManager {
             // Update data in the buffer
             self.buffer[block.start..block.start + data.len()].copy_from_slice(&data);
         }
-        block.set_data(data); // Update the MemoryBlock's data
         Ok(())
     }
 
@@ -82,4 +86,3 @@ impl MemoryManager {
         }
     }
 }
-
