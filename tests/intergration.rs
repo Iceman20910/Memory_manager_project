@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //use super::*; // fix this
 
     #[test]
     fn test_memory_manager() {
@@ -20,7 +20,9 @@ mod tests {
         let mut allocator = BuddyAllocator::new();
         let allocated_start = allocator.allocate(10).expect("Allocation failed");
         assert_eq!(allocated_start, 0); // Assuming allocation starts at 0
-        allocator.deallocate(allocated_start, 10).expect("Deallocation failed");
+        allocator
+            .deallocate(allocated_start, 10)
+            .expect("Deallocation failed");
     }
 
     #[test]
@@ -43,3 +45,4 @@ mod tests {
         assert!(manager.find(id).is_err());
     }
 }
+

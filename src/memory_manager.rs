@@ -1,3 +1,6 @@
+use crate::buddy_allocator::BuddyAllocator;
+use crate::memory_block::MemoryBlock;
+
 pub struct MemoryManager {
     allocator: BuddyAllocator,
     buffer: Vec<u8>,
@@ -22,7 +25,8 @@ impl MemoryManager {
     pub fn insert(&mut self, size: usize, data: Vec<u8>) -> Result<usize, String> {
         let start = self.allocator.allocate(size).map_err(|e| e.to_string())?;
         let id = self.next_id;
-        self.blocks.push(MemoryBlock::new(start, start + size, data));
+        self.blocks
+            .push(MemoryBlock::new(start, start + size, data));
         self.next_id += 1;
         Ok(id)
     }
@@ -32,7 +36,8 @@ impl MemoryManager {
             return Err("Invalid ID".to_string());
         }
         let block = self.blocks.remove(id);
-        self.allocator.deallocate(block.start, block.end - block.start)
+        self.allocator
+            .deallocate(block.start, block.end - block.start)
             .map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -42,10 +47,15 @@ impl MemoryManager {
         let current_size = block.end - block.start;
 
         if data.len() > current_size {
-            let new_start = self.allocator.allocate(data.len()).map_err(|e| e.to_string())?;
+            let new_start = self
+                .allocator
+                .allocate(data.len())
+                .map_err(|e| e.to_string())?;
             // Copy data into the buffer
             self.buffer[new_start..new_start + data.len()].copy_from_slice(&data);
-            self.allocator.deallocate(block.start, current_size).map_err(|e| e.to_string())?;
+            self.allocator
+                .deallocate(block.start, current_size)
+                .map_err(|e| e.to_string())?;
             block.start = new_start;
             block.end = new_start + data.len();
         } else {
@@ -72,3 +82,4 @@ impl MemoryManager {
         }
     }
 }
+

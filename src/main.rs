@@ -2,7 +2,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-use memory_manager::MemoryManager;
+// use memory_manager::MemoryManager; // fix this
 
 fn main() {
     println!("Starting memory manager application"); // Debug print
