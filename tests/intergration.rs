@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
-    //use super::*; // fix this
+    use memory_manager::memory_manager::MemoryManager; 
+    use memory_manager::buddy_allocator::BuddyAllocator; 
 
     #[test]
     fn test_memory_manager() {
