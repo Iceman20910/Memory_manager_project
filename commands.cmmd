@@ -1,8 +1,5 @@
-INSERT 5 Hello
-INSERT 7 Goodbye
+INSERT 10 HelloWorld
 READ 0
-UPDATE 0 World
-READ 0
+UPDATE 0 ModifiedData
 DUMP
-DELETE 1
-READ 1
+DELETE 0

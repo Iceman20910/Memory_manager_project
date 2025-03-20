@@ -2,14 +2,11 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-mod buddy_allocator;
-mod memory_block;
-mod memory_manager;
-mod tests;
-
 use memory_manager::MemoryManager;
 
 fn main() {
+    println!("Starting memory manager application"); // Debug print
+
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         println!("Usage: {} <command_file>", args[0]);
@@ -23,6 +20,8 @@ fn main() {
 
     for line in reader.lines() {
         let line = line.expect("Failed to read line");
+        println!("Processing command: {}", line); // Debug print
+
         let mut parts = line.split_whitespace();
 
         match parts.next().unwrap() {
@@ -62,4 +61,6 @@ fn main() {
             }
         }
     }
+
+    println!("Memory manager application finished"); // Debug print
 }
