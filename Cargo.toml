@@ -5,3 +5,4 @@ edition = "2021"
 description = "A custom memory manager implementation using buddy allocation"
 
 [dependencies]
+libc = "0.2"

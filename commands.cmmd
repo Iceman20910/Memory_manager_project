@@ -1,5 +1,0 @@
-INSERT 10 HelloWorld
-READ 0
-UPDATE 0 ModifiedData
-DUMP
-DELETE 0

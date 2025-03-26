@@ -4,8 +4,7 @@ pub struct BuddyAllocator {
 
 impl BuddyAllocator {
     pub fn new() -> Self {
-        // Initialize with a large block of memory
-        let free_blocks = vec![(0, 65536)]; // Example range
+        let free_blocks = vec![(0, 65536)];
         BuddyAllocator { free_blocks }
     }
 
@@ -14,25 +13,18 @@ impl BuddyAllocator {
             return Err("Invalid size".to_string());
         }
 
-        // Align size to the next power of two
         let aligned_size = size.next_power_of_two();
 
-        // Find a suitable block
         for i in 0..self.free_blocks.len() {
             let (start, end) = self.free_blocks[i];
             if end - start >= aligned_size {
-                // Remove the block from free list
                 self.free_blocks.remove(i);
-
-                // If there's leftover space, create a new free block
                 if end - start > aligned_size {
                     self.free_blocks.push((start + aligned_size, end));
                 }
-
                 return Ok(start);
             }
         }
-
         Err("Insufficient memory".to_string())
     }
 
@@ -43,12 +35,10 @@ impl BuddyAllocator {
         let aligned_size = size.next_power_of_two();
         let end = start + aligned_size;
 
-        // Check if the block to deallocate is valid
         if start >= end || end > 65536 {
             return Err("Invalid deallocation range".to_string());
         }
 
-        // Insert the block back into the free list
         self.free_blocks.push((start, end));
         self.merge_free_blocks();
         Ok(())
@@ -56,15 +46,11 @@ impl BuddyAllocator {
 
     fn merge_free_blocks(&mut self) {
         self.free_blocks.sort_by_key(|&(start, _)| start);
-
         let mut i = 0;
         while i < self.free_blocks.len() - 1 {
             let (start1, end1) = self.free_blocks[i];
             let (start2, end2) = self.free_blocks[i + 1];
-
-            // Check if the blocks are adjacent
             if end1 == start2 {
-                // Merge the blocks
                 self.free_blocks[i] = (start1, end2);
                 self.free_blocks.remove(i + 1);
             } else {
