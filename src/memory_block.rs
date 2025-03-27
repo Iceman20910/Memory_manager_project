@@ -7,6 +7,7 @@ pub struct MemoryBlock {
     // pub data: Vec<u8>,
 }
 
+// BS: moved documentation here
 impl MemoryBlock {
     /// Creates a new MemoryBlock instance.
     ///
