@@ -8,6 +8,15 @@ impl BuddyAllocator {
         BuddyAllocator { free_blocks }
     }
 
+    // BS: see https://en.wikipedia.org/wiki/Buddy_memory_allocation
+    //
+    // You're currently cutting spaces off of a large free block to perform allocation.
+    // Instead, you should be cutting the free block in half until it fits the size.
+    //
+    // Find the first free block that is greater than or equal to the requested size.
+    // If the  block is equal to the size, allocate it and you're done.
+    // If the block is greater than the requested size, cut it in half until it meets
+    // the size requirement.
     pub fn allocate(&mut self, size: usize) -> Result<usize, String> {
         if size == 0 {
             return Err("Invalid size".to_string());
