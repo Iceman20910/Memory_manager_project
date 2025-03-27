@@ -1,15 +1,10 @@
-/// Represents a free memory block
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct FreeBlock {
     pub start: usize,
     pub end: usize,
 }
 
 impl FreeBlock {
-    pub fn new(start: usize, end: usize) -> Self {
-        FreeBlock { start, end }
-    }
-
     pub fn size(&self) -> usize {
         self.end - self.start
     }
