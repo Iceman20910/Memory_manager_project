@@ -3,7 +3,8 @@
 pub struct MemoryBlock {
     pub start: usize,
     pub end: usize,
-    pub data: Vec<u8>,
+    // id: usize, // freeblocks do not have ids
+    // pub data: Vec<u8>,
 }
 
 impl MemoryBlock {
@@ -20,6 +21,7 @@ impl MemoryBlock {
     }
 }
 
+// you don't seem to be using this
 impl std::fmt::Display for MemoryBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
