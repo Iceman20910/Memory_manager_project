@@ -1,13 +1,13 @@
-/// Represents a memory block with start and end addresses
-#[derive(Debug, PartialEq)]
-pub struct MemoryBlock {
+/// Represents a free memory block
+#[derive(Debug, Clone)]
+pub struct FreeBlock {
     pub start: usize,
     pub end: usize,
 }
 
-impl MemoryBlock {
+impl FreeBlock {
     pub fn new(start: usize, end: usize) -> Self {
-        MemoryBlock { start, end }
+        FreeBlock { start, end }
     }
 
     pub fn size(&self) -> usize {
@@ -15,14 +15,14 @@ impl MemoryBlock {
     }
 }
 
-impl std::fmt::Display for MemoryBlock {
+impl std::fmt::Display for FreeBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "0x{:04X} - 0x{:04X}: ALLOCATED (Size: {} bytes)",
+            "Free Block: 0x{:04X} - 0x{:04X} (Size: {} bytes)",
             self.start,
             self.end,
-            self.end - self.start
+            self.size()
         )
     }
 }

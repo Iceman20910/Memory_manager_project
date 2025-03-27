@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use memory_manager::memory_manager::MemoryManager; 
-    use memory_manager::buddy_allocator::BuddyAllocator; 
+    use memory_manager::{MemoryManager, BuddyAllocator};
 
     #[test]
     fn test_memory_manager() {
@@ -10,7 +9,7 @@ mod tests {
 
         // Compare data in the buffer with byte array
         let block = manager.find(id).unwrap();
-        let data = &manager.buffer[block.start..block.end]; // Access data from the buffer
+        let data = manager.get_buffer_slice(block.start, block.end);
         assert_eq!(data, b"Hello");
 
         // Update the memory block
@@ -19,7 +18,7 @@ mod tests {
         // Access updated data in a separate scope
         {
             let block = manager.find(id).unwrap(); // Reborrow block
-            let updated_data = &manager.buffer[block.start..block.end]; // Access updated data
+            let updated_data = manager.get_buffer_slice(block.start, block.end);
             assert_eq!(updated_data, b"Goodbye");
         }
 
@@ -45,7 +44,7 @@ mod tests {
         // Check data after insertion
         {
             let block = read_result.unwrap();
-            let data = &manager.buffer[block.start..block.end]; // Access data from buffer
+            let data = manager.get_buffer_slice(block.start, block.end);
             assert_eq!(data, b"HelloWorld");
         }
 
@@ -55,7 +54,7 @@ mod tests {
         // Check data after update in a separate scope
         {
             let block = manager.find(id).unwrap(); // Reborrow block
-            let updated_data = &manager.buffer[block.start..block.end]; // Access updated data
+            let updated_data = manager.get_buffer_slice(block.start, block.end);
             assert_eq!(updated_data, b"ModifiedData");
         }
 
