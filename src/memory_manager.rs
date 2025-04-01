@@ -72,7 +72,18 @@ impl MemoryManager {
 
         // Create allocated block
         let id = self.next_id;
-        let allocated_block = MemoryBlock::Allocated(AllocatedBlock::new(id, start, end));
+        let padded_data = {
+            let mut padded_data = vec![0u8; size];
+            let data_len = data.len();
+            padded_data[..data_len].copy_from_slice(&data); // Copy original data
+            padded_data
+        };
+
+        // Store data and get the index
+        let data_index = self.data_storage.len();
+        self.data_storage.push(padded_data); // Store the padded data
+
+        let allocated_block = MemoryBlock::Allocated(AllocatedBlock::new(id, start, end, data_index));
 
         // Update blocks list
         let block_index = self.blocks.iter()
@@ -106,14 +117,11 @@ impl MemoryManager {
             _ => unreachable!(),
         }
 
+        // Copy data to buffer
+        self.buffer[start..end].copy_from_slice(&self.data_storage[data_index]);
+
         // Sort blocks by start address
         self.blocks.sort_by_key(|block| block.start());
-
-        // Store data
-        self.data_storage.push(data.clone());
-
-        // Copy data to buffer
-        self.buffer[start..end].copy_from_slice(&data);
 
         self.next_id += 1;
         Ok(id)
@@ -130,13 +138,30 @@ impl MemoryManager {
             })
             .ok_or("Block not found".to_string())?;
 
-        // Get block details
+        // Get the data index from the block being deleted
+        let data_index = match &self.blocks[block_index] {
+            MemoryBlock::Allocated(block) => block.data_index,
+            _ => unreachable!(),
+        };
+        
+        // Remove the corresponding data from data_storage
+        self.data_storage.remove(data_index);
+
+        // Update data indices of remaining blocks
+        for block in self.blocks.iter_mut() {
+            if let MemoryBlock::Allocated(allocated_block) = block {
+                if allocated_block.data_index > data_index {
+                    allocated_block.data_index -= 1; // Decrement index for blocks after the deleted block
+                }
+            }
+        }
+
+        // Deallocate memory using buddy allocator
         let (start, end) = match &self.blocks[block_index] {
             MemoryBlock::Allocated(block) => (block.start, block.end),
             _ => unreachable!(),
         };
 
-        // Deallocate memory using buddy allocator
         self.allocator.deallocate(start, end - start)
             .map_err(|e| e.to_string())?;
 
@@ -152,12 +177,6 @@ impl MemoryManager {
 
         // Sort blocks by start address
         self.blocks.sort_by_key(|block| block.start());
-
-        // Remove corresponding data
-        let data_index = self.data_storage.iter()
-            .position(|stored_data| stored_data.len() == end - start)
-            .expect("Data index not found");
-        self.data_storage.remove(data_index);
 
         Ok(())
     }
@@ -212,16 +231,20 @@ impl MemoryManager {
         if data.len() > current_end - current_start {
             // Need to reallocate
             self.delete(id)?;
+
+            // Insert new data with the correct size
             self.insert(data.len(), data)?;
         } else {
             // Update buffer in-place
             self.buffer[current_start..current_start + data.len()].copy_from_slice(&data);
 
-            // Update data storage
-            let data_index = self.data_storage.iter()
-                .position(|stored_data| stored_data.len() == current_end - current_start)
-                .expect("Data index not found");
-            self.data_storage[data_index] = data;
+            // Update data storage using the data index from the block
+            let data_index = match &self.blocks[block_index] {
+                MemoryBlock::Allocated(block) => block.data_index,
+                _ => unreachable!(),
+            };
+            
+            self.data_storage[data_index] = data; // Update with new data
         }
 
         Ok(())
@@ -238,34 +261,26 @@ impl MemoryManager {
     }
 
     pub fn get_data(&self, block: &AllocatedBlock) -> &[u8] {
-        let data_index = self.data_storage.iter()
-            .position(|stored_data| stored_data.len() == block.end - block.start)
-            .expect("Block not found in data storage");
+        let data_index = block.data_index; // Accessing the data index directly from the block
         &self.data_storage[data_index]
     }
 
     pub fn dump(&self) {
         println!("Memory Manager Dump:");
         
-        for block in &self.blocks {
+        for (i, block) in self.blocks.iter().enumerate() {
             match block {
                 MemoryBlock::Free(free_block) => {
                     println!(
-                        "Free Block: Start: 0x{:04X}, End: 0x{:04X}, Size: {}",
-                        free_block.start, 
-                        free_block.end, 
-                        free_block.size()
+                        "Block {}: Free Block, Start: 0x{:04X}, End: 0x{:04X}, Size: {}",
+                        i, free_block.start, free_block.end, free_block.end - free_block.start
                     );
                 }
                 MemoryBlock::Allocated(allocated_block) => {
                     let data = self.get_data(allocated_block);
                     println!(
-                        "Allocated Block ID: {}, Start: 0x{:04X}, End: 0x{:04X}, Size: {}, Data: {:?}",
-                        allocated_block.id,
-                        allocated_block.start,
-                        allocated_block.end,
-                        allocated_block.size(),
-                        data
+                        "Block {}: Allocated Block ID: {}, Start: 0x{:04X}, End: 0x{:04X}, Size: {}, Data: {:?}",
+                        i, allocated_block.id, allocated_block.start, allocated_block.end, allocated_block.end - allocated_block.start, data
                     );
                 }
             }
