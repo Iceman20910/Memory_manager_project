@@ -1,14 +1,39 @@
 use crate::free_block::FreeBlock;
 use crate::allocated_block::AllocatedBlock;
-use std::collections::HashMap;
+use crate::buddy_allocator::BuddyAllocator;
+
+#[derive(Debug, Clone)]
+pub enum MemoryBlock {
+    Free(FreeBlock),
+    Allocated(AllocatedBlock),
+}
+
+impl MemoryBlock {
+    pub fn start(&self) -> usize {
+        match self {
+            MemoryBlock::Free(block) => block.start,
+            MemoryBlock::Allocated(block) => block.start,
+        }
+    }
+
+    pub fn end(&self) -> usize {
+        match self {
+            MemoryBlock::Free(block) => block.end,
+            MemoryBlock::Allocated(block) => block.end,
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        self.end() - self.start()
+    }
+}
 
 pub struct MemoryManager {
+    allocator: BuddyAllocator,
     buffer: Vec<u8>,
-    data_storage: HashMap<usize, Vec<u8>>, // Changed to HashMap
-    free_blocks: Vec<FreeBlock>,
-    allocated_blocks: Vec<AllocatedBlock>,
+    data_storage: Vec<Vec<u8>>,
+    blocks: Vec<MemoryBlock>,
     next_id: usize,
-    min_block_size: usize, // Minimum block size for allocation
 }
 
 impl MemoryManager {
@@ -17,187 +42,232 @@ impl MemoryManager {
         let buffer = vec![0u8; buffer_size];
 
         // Initially, the entire buffer is a free block
-        let initial_free_block = FreeBlock { 
-            start: 0, 
-            end: buffer_size 
-        };
+        let initial_free_block = MemoryBlock::Free(FreeBlock::new(0, buffer_size));
 
         println!("Initializing MemoryManager with buffer size {}", buffer_size);
 
         MemoryManager {
+            allocator: BuddyAllocator::new(),
             buffer,
-            data_storage: HashMap::new(), // Initialize as an empty HashMap
-            free_blocks: vec![initial_free_block],
-            allocated_blocks: Vec::new(),
+            data_storage: Vec::new(),
+            blocks: vec![initial_free_block],
             next_id: 0,
-            min_block_size: 64, // Set the minimum block size (example value)
         }
+    }
+
+    pub fn get_buffer(&self) -> &[u8] {
+        &self.buffer
+    }
+
+    pub fn get_buffer_slice(&self, start: usize, end: usize) -> &[u8] {
+        &self.buffer[start..end]
     }
 
     pub fn insert(&mut self, size: usize, data: Vec<u8>) -> Result<usize, String> {
         println!("Attempting to insert block of size {} with data {:?}", size, data);
-
-        let start = self.allocate(size)?; // Allocate memory
-        let end = start + size;
-        let id = self.next_id;
-
-        // Ensure the data is the correct size
-        let mut padded_data = vec![0u8; size]; // Create a buffer of the allocated size
-        let data_len = data.len();
         
-        // Copy the original data into the padded buffer
-        padded_data[..data_len].copy_from_slice(&data); // Copy original data
-        self.data_storage.insert(id, padded_data.clone()); // Store the padded data with the ID as the key
+        // Use buddy allocator to find a suitable block
+        let start = self.allocator.allocate(size).map_err(|e| e.to_string())?;
+        let end = start + size;
 
         // Create allocated block
-        let allocated_block = AllocatedBlock { id, start, end };
-        self.allocated_blocks.push(allocated_block);
+        let id = self.next_id;
+        let allocated_block = MemoryBlock::Allocated(AllocatedBlock::new(id, start, end));
+
+        // Update blocks list
+        let block_index = self.blocks.iter()
+            .position(|block| match block {
+                MemoryBlock::Free(free_block) => free_block.start <= start && free_block.end >= end,
+                _ => false,
+            })
+            .ok_or("No suitable free block found".to_string())?;
+
+        // Remove the original free block
+        let original_block = self.blocks.remove(block_index);
+
+        // Add allocated block
+        self.blocks.push(allocated_block);
+
+        // Handle remaining free space
+        match original_block {
+            MemoryBlock::Free(free_block) => {
+                // Add free block before allocation if exists
+                if free_block.start < start {
+                    let pre_free_block = MemoryBlock::Free(FreeBlock::new(free_block.start, start));
+                    self.blocks.push(pre_free_block);
+                }
+
+                // Add free block after allocation if exists
+                if end < free_block.end {
+                    let post_free_block = MemoryBlock::Free(FreeBlock::new(end, free_block.end));
+                    self.blocks.push(post_free_block);
+                }
+            }
+            _ => unreachable!(),
+        }
+
+        // Sort blocks by start address
+        self.blocks.sort_by_key(|block| block.start());
+
+        // Store data
+        self.data_storage.push(data.clone());
+
+        // Copy data to buffer
+        self.buffer[start..end].copy_from_slice(&data);
 
         self.next_id += 1;
         Ok(id)
-    }
-
-    pub fn allocate(&mut self, size: usize) -> Result<usize, String> {
-        // Calculate the required block size
-        let mut block_size = self.min_block_size;
-
-        while block_size < size {
-            block_size *= 2;
-        }
-
-        // Find the first free block that is large enough
-        let index = self.free_blocks.iter()
-            .position(|block| (block.end - block.start) >= block_size)
-            .ok_or("No suitable block found".to_string())?;
-
-        // Get the block to allocate
-        let mut block = self.free_blocks.remove(index);
-
-        // Split the block until it meets the size requirement
-        while (block.end - block.start) > block_size {
-            // Split the block into two halves
-            let half_size = (block.end - block.start) / 2;
-            let new_block = FreeBlock {
-                start: block.start + half_size,
-                end: block.end,
-            };
-
-            // Insert the new half back into the free list
-            self.free_blocks.push(new_block);
-
-            // Reduce the size of the current block
-            block.end = block.start + half_size; // Update the end to reflect the new size
-        }
-
-        // Mark the block as allocated and return its start address
-        Ok(block.start)
     }
 
     pub fn delete(&mut self, id: usize) -> Result<(), String> {
         println!("Attempting to delete block ID {}", id);
         
         // Find the block by ID
-        let block_index = self.allocated_blocks.iter()
-            .position(|block| block.id == id)
+        let block_index = self.blocks.iter()
+            .position(|block| match block {
+                MemoryBlock::Allocated(allocated_block) => allocated_block.id == id,
+                _ => false,
+            })
             .ok_or("Block not found".to_string())?;
-        
-        let block = self.allocated_blocks.remove(block_index);
-        
-        // Add back to free blocks
-        self.free_blocks.push(FreeBlock { 
-            start: block.start, 
-            end: block.end 
-        });
 
-        // Remove corresponding data from the HashMap
-        self.data_storage.remove(&id);
+        // Get block details
+        let (start, end) = match &self.blocks[block_index] {
+            MemoryBlock::Allocated(block) => (block.start, block.end),
+            _ => unreachable!(),
+        };
+
+        // Deallocate memory using buddy allocator
+        self.allocator.deallocate(start, end - start)
+            .map_err(|e| e.to_string())?;
+
+        // Remove the block from blocks list
+        self.blocks.remove(block_index);
+
+        // Add back as a free block
+        let free_block = MemoryBlock::Free(FreeBlock::new(start, end));
+        self.blocks.push(free_block);
+
+        // Merge adjacent free blocks
+        self.merge_free_blocks();
+
+        // Sort blocks by start address
+        self.blocks.sort_by_key(|block| block.start());
+
+        // Remove corresponding data
+        let data_index = self.data_storage.iter()
+            .position(|stored_data| stored_data.len() == end - start)
+            .expect("Data index not found");
+        self.data_storage.remove(data_index);
 
         Ok(())
+    }
+
+    fn merge_free_blocks(&mut self) {
+        let mut merged = false;
+        while !merged {
+            merged = true;
+            for i in 0..self.blocks.len() {
+                if let MemoryBlock::Free(current_free) = &self.blocks[i] {
+                    for j in (i + 1)..self.blocks.len() {
+                        if let MemoryBlock::Free(next_free) = &self.blocks[j] {
+                            if current_free.end == next_free.start {
+                                // Merge adjacent free blocks
+                                let merged_free_block = MemoryBlock::Free(FreeBlock::new(
+                                    current_free.start, 
+                                    next_free.end
+                                ));
+                                self.blocks.remove(j);
+                                self.blocks[i] = merged_free_block;
+                                merged = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if !merged {
+                    break;
+                }
+            }
+        }
     }
 
     pub fn update(&mut self, id: usize, data: Vec<u8>) -> Result<(), String> {
         println!("Attempting to update block ID {} with data {:?}", id, data);
         
         // Find the block by ID
-        let block_index = self.allocated_blocks.iter()
-            .position(|block| block.id == id)
+        let block_index = self.blocks.iter()
+            .position(|block| match block {
+                MemoryBlock::Allocated(allocated_block) => allocated_block.id == id,
+                _ => false,
+            })
             .ok_or("Block not found".to_string())?;
-        
-        // Clone the block (removed mutability)
-        let block = self.allocated_blocks[block_index].clone();
+
+        // Get current block details
+        let (current_start, current_end) = match &self.blocks[block_index] {
+            MemoryBlock::Allocated(block) => (block.start, block.end),
+            _ => unreachable!(),
+        };
 
         // Check if new data fits in existing block
-        if data.len() > (block.end - block.start) {
+        if data.len() > current_end - current_start {
             // Need to reallocate
-            let new_start = self.allocate(data.len()).map_err(|e| e.to_string())?;
-            let new_end = new_start + data.len();
-
-            // Update buffer
-            self.buffer[new_start..new_end].copy_from_slice(&data);
-
-            // Free the old block
-            self.delete(block.id)?;
-
-            // Create new allocated block
-            let new_block = AllocatedBlock {
-                id: block.id,
-                start: new_start,
-                end: new_end,
-            };
-            self.allocated_blocks.push(new_block);
+            self.delete(id)?;
+            self.insert(data.len(), data)?;
         } else {
             // Update buffer in-place
-            self.buffer[block.start..block.start + data.len()].copy_from_slice(&data);
-        }
+            self.buffer[current_start..current_start + data.len()].copy_from_slice(&data);
 
-        // Update data storage in the HashMap
-        self.data_storage.insert(block.id, data);
+            // Update data storage
+            let data_index = self.data_storage.iter()
+                .position(|stored_data| stored_data.len() == current_end - current_start)
+                .expect("Data index not found");
+            self.data_storage[data_index] = data;
+        }
 
         Ok(())
     }
 
     pub fn find(&self, id: usize) -> Result<&AllocatedBlock, String> {
         println!("Attempting to find block ID {}", id);
-        self.allocated_blocks.iter()
-            .find(|block| block.id == id)
+        self.blocks.iter()
+            .find_map(|block| match block {
+                MemoryBlock::Allocated(allocated_block) if allocated_block.id == id => Some(allocated_block),
+                _ => None,
+            })
             .ok_or("Block not found".to_string())
+    }
+
+    pub fn get_data(&self, block: &AllocatedBlock) -> &[u8] {
+        let data_index = self.data_storage.iter()
+            .position(|stored_data| stored_data.len() == block.end - block.start)
+            .expect("Block not found in data storage");
+        &self.data_storage[data_index]
     }
 
     pub fn dump(&self) {
         println!("Memory Manager Dump:");
         
-        // Print Free Blocks
-        println!("Free Blocks:");
-        for (i, free_block) in self.free_blocks.iter().enumerate() {
-            println!(
-                "  Free Block {}: Start: 0x{:04X}, End: 0x{:04X}, Size: {}",
-                i, 
-                free_block.start, 
-                free_block.end,
-                free_block.end - free_block.start // Calculate size here
-            );
-        }
-        
-        // Print Allocated Blocks
-        println!("Allocated Blocks:");
-        for block in &self.allocated_blocks {
-            if let Some(data) = self.data_storage.get(&block.id) { // Get data from storage using the ID
-                println!(
-                    "  Block ID: {}, Start: 0x{:04X}, End: 0x{:04X}, Size: {}, Data: {:?}",
-                    block.id,
-                    block.start,
-                    block.end,
-                    block.end - block.start,
-                    data
-                );
-            } else {
-                println!(
-                    "  Block ID: {}, Start: 0x{:04X}, End: 0x{:04X}, Size: {}, Data: <Missing>",
-                    block.id,
-                    block.start,
-                    block.end,
-                    block.end - block.start
-                );
+        for block in &self.blocks {
+            match block {
+                MemoryBlock::Free(free_block) => {
+                    println!(
+                        "Free Block: Start: 0x{:04X}, End: 0x{:04X}, Size: {}",
+                        free_block.start, 
+                        free_block.end, 
+                        free_block.size()
+                    );
+                }
+                MemoryBlock::Allocated(allocated_block) => {
+                    let data = self.get_data(allocated_block);
+                    println!(
+                        "Allocated Block ID: {}, Start: 0x{:04X}, End: 0x{:04X}, Size: {}, Data: {:?}",
+                        allocated_block.id,
+                        allocated_block.start,
+                        allocated_block.end,
+                        allocated_block.size(),
+                        data
+                    );
+                }
             }
         }
     }
