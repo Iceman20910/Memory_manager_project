@@ -63,28 +63,37 @@ impl MemoryManager {
         &self.buffer[start..end]
     }
 
+    fn round_up_to_power_of_two(size: usize) -> usize {
+        let mut power = 1;
+        while power < size {
+            power <<= 1;
+        }
+        power
+    }
+
     pub fn insert(&mut self, size: usize, data: Vec<u8>) -> Result<usize, String> {
-        println!("Attempting to insert block of size {} with data {:?}", size, data);
+        let rounded_size = Self::round_up_to_power_of_two(size);
+        println!("Attempting to insert block of size {} (rounded to {}) with data {:?}", size, rounded_size, data);
         
         // Use buddy allocator to find a suitable block
-        let start = self.allocator.allocate(size).map_err(|e| e.to_string())?;
-        let end = start + size;
-
+        let start = self.allocator.allocate(rounded_size).map_err(|e| e.to_string())?;
+        let end = start + rounded_size;
+    
         // Create allocated block
         let id = self.next_id;
         let padded_data = {
-            let mut padded_data = vec![0u8; size];
+            let mut padded_data = vec![0u8; rounded_size];
             let data_len = data.len();
             padded_data[..data_len].copy_from_slice(&data); // Copy original data
             padded_data
         };
-
+    
         // Store data and get the index
         let data_index = self.data_storage.len();
         self.data_storage.push(padded_data); // Store the padded data
-
+    
         let allocated_block = MemoryBlock::Allocated(AllocatedBlock::new(id, start, end, data_index));
-
+    
         // Update blocks list
         let block_index = self.blocks.iter()
             .position(|block| match block {
@@ -92,37 +101,33 @@ impl MemoryManager {
                 _ => false,
             })
             .ok_or("No suitable free block found".to_string())?;
-
+    
         // Remove the original free block
         let original_block = self.blocks.remove(block_index);
-
+    
         // Add allocated block
         self.blocks.push(allocated_block);
-
+    
         // Handle remaining free space
         match original_block {
             MemoryBlock::Free(free_block) => {
-                // Add free block before allocation if exists
-                if free_block.start < start {
-                    let pre_free_block = MemoryBlock::Free(FreeBlock::new(free_block.start, start));
-                    self.blocks.push(pre_free_block);
-                }
-
-                // Add free block after allocation if exists
-                if end < free_block.end {
-                    let post_free_block = MemoryBlock::Free(FreeBlock::new(end, free_block.end));
-                    self.blocks.push(post_free_block);
+                let remaining_size = free_block.size() - rounded_size;
+    
+                // Split the free block if there is remaining space
+                if remaining_size > 0 {
+                    let (_allocated_part, remaining_part) = free_block.split(rounded_size); // Prefix with underscore
+                    self.blocks.push(MemoryBlock::Free(remaining_part));
                 }
             }
             _ => unreachable!(),
         }
-
+    
         // Copy data to buffer
         self.buffer[start..end].copy_from_slice(&self.data_storage[data_index]);
-
+    
         // Sort blocks by start address
         self.blocks.sort_by_key(|block| block.start());
-
+    
         self.next_id += 1;
         Ok(id)
     }
