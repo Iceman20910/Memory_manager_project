@@ -1,5 +1,5 @@
-INSERT 24 data1
-INSERT 48 data2
-DELETE 0
-UPDATE 1 data3
-DUMP
+insert 24 data1;
+insert 48 data2;
+delete 0;
+update 1 data3;
+dump;

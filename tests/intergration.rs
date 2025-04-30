@@ -24,12 +24,12 @@ mod tests {
         
         // Verify first block
         let block1 = memory_manager.find(id1).expect("First block should be found");
-        let retrieved_data1 = memory_manager.get_buffer_slice(block1.start, block1.end);
+        let retrieved_data1 = memory_manager.get_data(block1);
         assert_eq!(retrieved_data1, &data1, "First block data should match");
         
         // Verify second block
         let block2 = memory_manager.find(id2).expect("Second block should be found");
-        let retrieved_data2 = memory_manager.get_buffer_slice(block2.start, block2.end);
+        let retrieved_data2 = memory_manager.get_data(block2);
         assert_eq!(retrieved_data2, &data2, "Second block data should match");
     }
 
@@ -47,7 +47,7 @@ mod tests {
         
         // Verify updated block
         let block = memory_manager.find(id).expect("Block should be found after update");
-        let retrieved_data = memory_manager.get_buffer_slice(block.start, block.end);
+        let retrieved_data = memory_manager.get_data(block);
         assert_eq!(retrieved_data, &updated_data, "Block data should be updated");
         
         // Delete block

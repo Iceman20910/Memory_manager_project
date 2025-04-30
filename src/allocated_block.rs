@@ -1,10 +1,9 @@
-/// Represents an allocated memory block
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)] // Added PartialEq here
 pub struct AllocatedBlock {
     pub id: usize,
     pub start: usize,
     pub end: usize,
-    pub data_index: usize, // New field to keep track of the index in data_storage
+    pub data_index: usize, // Field to keep track of the index in data_storage
 }
 
 impl AllocatedBlock {
