@@ -192,30 +192,15 @@ impl MemoryManager {
 
     pub fn dump(&self) {
         println!("Memory Manager Dump:");
-        
-        for block in self.blocks.iter() {
+
+        // Sort the blocks by their start addresses
+        let mut blocks: Vec<&MemoryBlock> = self.blocks.iter().collect();
+        blocks.sort_by_key(|block| block.start());
+
+        let mut free_blocks = Vec::new();
+
+        for block in blocks {
             match block {
-                MemoryBlock::Free(free_block) => {
-                    let mut current_start = free_block.start;
-                    while current_start < free_block.end {
-                        let block_size = MemoryManager::next_power_of_two_size(free_block.end - current_start); // Use associated function syntax
-                        let block_end = current_start + block_size;
-                        if block_end > free_block.end {
-                            // If the block size would exceed the remaining free space, use the remaining space
-                            println!(
-                                "0x{:04X} - 0x{:04X}: FREE (Size: {} bytes)",
-                                current_start, free_block.end, free_block.end - current_start
-                            );
-                            break;
-                        } else {
-                            println!(
-                                "0x{:04X} - 0x{:04X}: FREE (Size: {} bytes)",
-                                current_start, block_end, block_size
-                            );
-                        }
-                        current_start = block_end;
-                    }
-                }
                 MemoryBlock::Allocated(allocated_block) => {
                     let data = self.get_data(allocated_block);
                     println!(
@@ -224,7 +209,32 @@ impl MemoryManager {
                     );
                     println!("Data: {:?}", String::from_utf8_lossy(data));
                 }
+                MemoryBlock::Free(free_block) => {
+                    let mut current_start = free_block.start;
+                    while current_start < free_block.end {
+                        let block_size = MemoryManager::next_power_of_two_size(free_block.end - current_start);
+                        let block_end = current_start + block_size;
+                        if block_end > free_block.end {
+                            free_blocks.push((current_start, free_block.end));
+                            break;
+                        } else {
+                            free_blocks.push((current_start, block_end));
+                        }
+                        current_start = block_end;
+                    }
+                }
             }
+        }
+
+        // Sort free blocks by their size in ascending order
+        free_blocks.sort_by_key(|(start, end)| end - start);
+        
+        // Print free blocks in ascending order of their sizes
+        for (start, end) in free_blocks {
+            println!(
+                "0x{:04X} - 0x{:04X}: FREE (Size: {} bytes)",
+                start, end, end - start
+            );
         }
     }
 
