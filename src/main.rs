@@ -5,10 +5,6 @@ use memory_manager::MemoryManager;
 
 fn main() {
     let mut mm = MemoryManager::new(); // Initialize MemoryManager with default size
-    mm.insert(3, b"hi".to_vec()).expect("Insert failed"); // Insert data
-    println!("{}", mm.find(0).expect("Find failed").to_string()); // Use to_string for display
-    println!();
-    mm.dump(); // Print memory dump
     
     // Handle command file if provided
     let args: Vec<String> = env::args().collect();
@@ -20,7 +16,8 @@ fn main() {
             let line = line.expect("Failed to read line");
             eprintln!("Processing command: {}", line);
 
-            let mut parts = line.split_whitespace();
+            let mut parts = line.split(|c: char| c.is_whitespace() || c == ';').filter(|s| !s.is_empty());
+
 
             match parts.next().unwrap().to_uppercase().as_str() {
                 "INSERT" => {

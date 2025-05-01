@@ -74,30 +74,33 @@ impl MemoryManager {
 
         let allocated_block = MemoryBlock::Allocated(AllocatedBlock::new(id, start, end, data_index));
 
-        let block_index = self.blocks.iter()
-            .position(|block| match block {
-                MemoryBlock::Free(free_block) => free_block.start <= start && free_block.end >= end,
-                _ => false,
-            })
-            .ok_or("No suitable free block found".to_string())?;
-
-        let original_block = self.blocks.remove(block_index);
-        self.blocks.push(allocated_block);
-
-        match original_block {
-            MemoryBlock::Free(free_block) => {
-                let remaining_size = free_block.size() - rounded_size;
-                if remaining_size > 0 {
-                    let (_allocated_part, remaining_part) = free_block.split(rounded_size);
-                    self.blocks.push(MemoryBlock::Free(remaining_part));
+        match self.blocks.iter().position(|block| match block {
+            MemoryBlock::Free(free_block) => free_block.start <= start && free_block.end >= end,
+            _ => false,
+        }) {
+            Some(block_index) => {
+                let original_block = self.blocks.remove(block_index);
+                
+                match original_block {
+                    MemoryBlock::Free(free_block) => {
+                        let remaining_size = free_block.size() - rounded_size;
+                        if remaining_size > 0 {
+                            let (_allocated_part, remaining_part) = free_block.split(rounded_size);
+                            self.blocks.push(MemoryBlock::Free(remaining_part));
+                        }
+                    }
+                    _ => unreachable!(),
                 }
+
+                // Insert the allocated block at the correct position
+                let index = self.blocks.binary_search_by_key(&start, |block| block.start()).unwrap_or_else(|x| x);
+                self.blocks.insert(index, allocated_block);
             }
-            _ => unreachable!(),
+            None => return Err("No suitable free block found".to_string()), // Handle case where no free block is found
         }
 
         // Copy only the actual data length to the buffer
         self.buffer[start..start + data_len].copy_from_slice(&data); // Ensure only relevant data is copied
-        self.blocks.sort_by_key(|block| block.start());
         self.next_id += 1;
         Ok(id)
     }
@@ -193,21 +196,21 @@ impl MemoryManager {
     pub fn dump(&self) {
         println!("Memory Manager Dump:");
 
-        // Sort the blocks by their start addresses
-        let mut blocks: Vec<&MemoryBlock> = self.blocks.iter().collect();
-        blocks.sort_by_key(|block| block.start());
+        let mut blocks: Vec<(usize, usize, String)> = Vec::new();
 
-        let mut free_blocks = Vec::new();
-
-        for block in blocks {
+        for block in &self.blocks {
             match block {
                 MemoryBlock::Allocated(allocated_block) => {
                     let data = self.get_data(allocated_block);
-                    println!(
-                        "0x{:04X} - 0x{:04X}: ALLOCATED (ID: {}) (Size: {} bytes)",
-                        allocated_block.start, allocated_block.end, allocated_block.id, allocated_block.size()
-                    );
-                    println!("Data: {:?}", String::from_utf8_lossy(data));
+                    blocks.push((
+                        allocated_block.start, 
+                        allocated_block.end, 
+                        format!("ALLOCATED (ID: {}) (Size: {} bytes) Data: {:?}", 
+                                allocated_block.id, 
+                                allocated_block.size(), 
+                                String::from_utf8_lossy(data)
+                        ),
+                    ));
                 }
                 MemoryBlock::Free(free_block) => {
                     let mut current_start = free_block.start;
@@ -215,10 +218,18 @@ impl MemoryManager {
                         let block_size = MemoryManager::next_power_of_two_size(free_block.end - current_start);
                         let block_end = current_start + block_size;
                         if block_end > free_block.end {
-                            free_blocks.push((current_start, free_block.end));
+                            blocks.push((
+                                current_start, 
+                                free_block.end, 
+                                format!("FREE (Size: {} bytes)", free_block.end - current_start)
+                            ));
                             break;
                         } else {
-                            free_blocks.push((current_start, block_end));
+                            blocks.push((
+                                current_start, 
+                                block_end, 
+                                format!("FREE (Size: {} bytes)", block_end - current_start)
+                            ));
                         }
                         current_start = block_end;
                     }
@@ -226,15 +237,12 @@ impl MemoryManager {
             }
         }
 
-        // Sort free blocks by their size in ascending order
-        free_blocks.sort_by_key(|(start, end)| end - start);
-        
-        // Print free blocks in ascending order of their sizes
-        for (start, end) in free_blocks {
-            println!(
-                "0x{:04X} - 0x{:04X}: FREE (Size: {} bytes)",
-                start, end, end - start
-            );
+        // Sort all blocks by their start address
+        blocks.sort_by_key(|(start, _, _)| *start);
+
+        // Print all blocks in sorted order
+        for (start, end, desc) in blocks {
+            println!("0x{:04X} - 0x{:04X}: {}", start, end, desc);
         }
     }
 
